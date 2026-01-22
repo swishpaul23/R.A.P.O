@@ -38,7 +38,7 @@ def analyze_portfolio(weights, log_returns):
     
     return annual_return, annual_volatility, sharpe_ratio
 
-def run_simulation(log_returns, num_simulations=5000):
+def run_simulation(log_returns, num_simulations=10000):
     """
     Runs a Monte Carlo simulation to generate thousands of random portfolios.
     """

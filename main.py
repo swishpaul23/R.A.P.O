@@ -4,9 +4,9 @@ import visualizer
 
 # --- CONFIGURATION (Change these to test different strategies) ---
 # Tickers: Standard finance mix (S&P500, Bonds, Gold, Tech, Defensive)
-TICKERS = ['SPY', 'TLT', 'GLD', 'NVDA', 'XLP'] 
-START_DATE = '2021-01-01'
-END_DATE = '2025-01-01'
+TICKERS = ['SPY', 'QBTS', 'META', 'NVDA', 'RKLB', 'GOOGL'] 
+START_DATE = '2025-01-01'
+END_DATE = '2026-01-01'
 
 def main():
     print("-----------------------------------")
