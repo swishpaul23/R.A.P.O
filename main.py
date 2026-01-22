@@ -4,7 +4,7 @@ import visualizer
 
 # --- CONFIGURATION (Change these to test different strategies) ---
 # Tickers: Standard finance mix (S&P500, Bonds, Gold, Tech, Defensive)
-TICKERS = ['SPY', 'QBTS', 'META', 'NVDA', 'RKLB', 'GOOGL'] 
+TICKERS = ['META', 'NVDA', 'RKLB', 'GOOGL', 'AAPL', 'MSFT'] 
 START_DATE = '2025-01-01'
 END_DATE = '2026-01-01'
 
