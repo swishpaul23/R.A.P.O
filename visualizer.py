@@ -1,6 +1,50 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import portfolio_math # Lazy import
+def plot_var_distribution(portfolio_returns, var_95):
+    """
+    Plots the distribution of daily returns and marks the VaR cutoff.
+    """
+    simple_returns = np.exp(portfolio_returns) - 1
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    plt.style.use('seaborn-v0_8-darkgrid')
+    
+    # Histogram of returns
+    ax.hist(simple_returns, bins=50, alpha=0.7, color='steelblue', label='Daily Returns')
+    
+    # VaR Line
+    ax.axvline(var_95, color='red', linestyle='--', linewidth=2, label=f'95% VaR: {var_95:.2%}')
+    
+    ax.set_title('Daily Risk Distribution (Value at Risk)')
+    ax.set_xlabel('Daily Return')
+    ax.set_ylabel('Frequency')
+    ax.legend()
+    
+    return fig
+
+def plot_backtest(strategy_log_rets, benchmark_log_rets):
+    """
+    Plots the Cumulative Return of the Strategy vs. Benchmark.
+    """
+    # Cumulative Return = exp(cumsum(log_returns))
+    cum_strategy = np.exp(strategy_log_rets.cumsum()) * 100 # Normalized to 100
+    cum_benchmark = np.exp(benchmark_log_rets.cumsum()) * 100
+    
+    # Align dates (Benchmark might be longer than strategy because of the lookback window)
+    aligned_benchmark = cum_benchmark.reindex(cum_strategy.index).fillna(100)
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    plt.style.use('seaborn-v0_8-darkgrid')
+    
+    ax.plot(cum_strategy.index, cum_strategy, label='Walk-Forward Strategy', color='green', linewidth=2)
+    ax.plot(aligned_benchmark.index, aligned_benchmark, label='S&P 500 (Benchmark)', color='gray', linestyle='--', alpha=0.7)
+    
+    ax.set_title('Backtest: Dynamic Rebalancing vs. Buy & Hold')
+    ax.set_ylabel('Portfolio Value (Start = 100)')
+    ax.legend()
+    
+    return fig
 
 def plot_efficient_frontier(sim_results, optimal_weights, log_returns, tickers):
     """
