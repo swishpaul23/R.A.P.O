@@ -127,3 +127,57 @@ if __name__ == "__main__":
         print(f"{ticker}: {weight:.2%}")
         
     print("\nTest Passed!")
+def calculate_var(portfolio_returns, confidence_level=0.95):
+    """
+    Calculates Historical Value at Risk (VaR).
+    If confidence is 0.95, it returns the 5th percentile worst loss.
+    """
+    # 1. Convert log returns to simple percentage returns for easier reading
+    simple_returns = np.exp(portfolio_returns) - 1
+    
+    # 2. Find the cutoff point
+    cutoff = (1 - confidence_level) * 100
+    var_value = np.percentile(simple_returns, cutoff)
+    
+    return var_value
+
+def rolling_backtest(log_returns, window_days=252, rebalance_days=63):
+    """
+    Simulates a 'Walk-Forward' strategy.
+    - Look back 'window_days' (e.g., 1 year) to calculate optimal weights.
+    - Hold those weights for 'rebalance_days' (e.g., 1 quarter).
+    - Repeat.
+    """
+    num_days = len(log_returns)
+    num_assets = len(log_returns.columns)
+    
+    # Create an empty array to store the strategy's daily returns
+    strategy_log_returns = pd.Series(index=log_returns.index, data=0.0)
+    
+    # Start the loop after the first window (e.g., Day 253)
+    # We step forward by 'rebalance_days' chunks
+    print(f"Starting Walk-Forward Backtest (Window={window_days}, Rebalance={rebalance_days})...")
+    
+    for t in range(window_days, num_days, rebalance_days):
+        # 1. Slice the "Lookback" data (What we knew THEN)
+        start_idx = t - window_days
+        end_idx = t
+        lookback_data = log_returns.iloc[start_idx:end_idx]
+        
+        # 2. Optimize weights based ONLY on that past data
+        # (This is the slow part - running Scipy inside a loop)
+        current_weights = optimize_portfolio(lookback_data)
+        
+        # 3. Apply weights to the "Future" (next rebalance period)
+        # Handle the end of the dataset
+        next_rebalance = min(t + rebalance_days, num_days)
+        future_returns = log_returns.iloc[t:next_rebalance]
+        
+        # Calculate returns for this period: Sum(Asset_Return * Weight)
+        # Note: In log returns, we can't just multiply, but for daily small steps, 
+        # weighted sum is a close enough approximation for this simulation.
+        period_ret = (future_returns * current_weights).sum(axis=1)
+        strategy_log_returns.iloc[t:next_rebalance] = period_ret
+        
+    # Drop the first 'window_days' because we were just watching, not trading
+    return strategy_log_returns.iloc[window_days:]
