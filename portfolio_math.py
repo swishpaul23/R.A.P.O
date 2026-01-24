@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 import scipy.optimize as scipy_opt
+import scipy.cluster.hierarchy as sch
+import scipy.spatial.distance as ssd
 
 def calculate_log_returns(prices):
     """
@@ -181,3 +183,84 @@ def rolling_backtest(log_returns, window_days=252, rebalance_days=63):
         
     # Drop the first 'window_days' because we were just watching, not trading
     return strategy_log_returns.iloc[window_days:]
+# --- HIERARCHICAL RISK PARITY (HRP) LOGIC ---
+
+def get_ivp(cov):
+    """Calculates Inverse Variance Portfolio (Risk Parity)"""
+    ivp = 1. / np.diag(cov)
+    ivp /= ivp.sum()
+    return ivp
+
+def get_cluster_var(cov, c_items):
+    """Calculates variance of a cluster"""
+    cov_slice = cov.loc[c_items, c_items]   # <--- Change to .loc
+    w = get_ivp(cov_slice).reshape(-1, 1)
+    c_var = np.dot(np.dot(w.T, cov_slice), w)[0, 0]
+    return c_var
+
+def get_quasi_diag(link):
+    """Sorts the cluster to place similar assets next to each other"""
+    link = link.astype(int)
+    sort_ix = pd.Series([link[-1, 0], link[-1, 1]])
+    num_items = link[-1, 3]
+    
+    while sort_ix.max() >= num_items:
+        sort_ix.index = range(0, sort_ix.shape[0] * 2, 2)
+        df0 = sort_ix[sort_ix >= num_items]
+        i = df0.index
+        j = df0.values - num_items
+        sort_ix[i] = link[j, 0]
+        df0 = pd.Series(link[j, 1], index=i + 1)
+        sort_ix = pd.concat([sort_ix, df0])
+        sort_ix = sort_ix.sort_index()
+        sort_ix.index = range(sort_ix.shape[0])
+        
+    return sort_ix.tolist()
+
+def get_rec_bisection(cov, sort_ix):
+    """Recursive Bisection: The core logic that allocates weights"""
+    w = pd.Series(1, index=sort_ix)
+    c_items = [sort_ix]
+    
+    while len(c_items) > 0:
+        c_items = [i[j:k] for i in c_items for j, k in ((0, len(i) // 2), (len(i) // 2, len(i))) if len(i) > 1]
+        
+        for i in range(0, len(c_items), 2):
+            c0 = c_items[i]
+            c1 = c_items[i + 1]
+            
+            c_var0 = get_cluster_var(cov, c0)
+            c_var1 = get_cluster_var(cov, c1)
+            
+            alpha = 1 - c_var0 / (c_var0 + c_var1)
+            w[c0] *= alpha
+            w[c1] *= 1 - alpha
+            
+    return w
+
+def optimize_hrp(log_returns):
+    """
+    Main HRP Function.
+    1. Cluster the assets based on correlation.
+    2. Sort them (Quasi-Diagonalization).
+    3. Allocate risk recursively.
+    """
+    # 1. Compute Correlation & Covariance
+    corr = log_returns.corr()
+    cov = log_returns.cov()
+    
+    # 2. Clustering (Single Linkage)
+    dist = ssd.squareform(((1 - corr) / 2)**0.5)
+    link = sch.linkage(dist, 'single')
+    
+    # 3. Sort (Quasi-Diagonalization)
+    sort_ix = get_quasi_diag(link)
+    sort_ix = corr.index[sort_ix].tolist()
+    
+    # 4. Allocation (Recursive Bisection)
+    # We re-order the covariance matrix to match the sorted cluster
+    cov_sorted = cov.loc[sort_ix, sort_ix]
+    hrp_weights = get_rec_bisection(cov_sorted, sort_ix)
+    
+    # Re-sort weights to match the original ticker order (alphabetical/input order)
+    return hrp_weights[log_returns.columns].values, link
