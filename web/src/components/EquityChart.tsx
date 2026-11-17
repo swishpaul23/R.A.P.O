@@ -72,6 +72,8 @@ export default function EquityChart({ data, mode, focus, hidden }: Props) {
     const raf = requestAnimationFrame(() => c.timeScale().fitContent());
     return () => {
       cancelAnimationFrame(raf);
+      // On unmount the chart effect above has already disposed the chart.
+      if (chart.current !== c) return;
       for (const s of lines.current.values()) c.removeSeries(s);
       lines.current.clear();
       c.removeSeries(band);
