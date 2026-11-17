@@ -6,7 +6,6 @@ yfinance>=1.0
 pyarrow>=15
 matplotlib>=3.9
 seaborn>=0.13
-streamlit>=1.40
 pytest>=8
 fastapi>=0.115
 uvicorn[standard]>=0.30
