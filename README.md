@@ -1,48 +1,41 @@
-# 📈 Algo-Advisor: Modern Portfolio Theory Optimizer
+# R.A.P.O: Robo-Advisor Portfolio Optimizer
 
-### A Python-based quantitative tool that automates asset allocation using Monte Carlo simulations and the Sharpe Ratio maximization algorithm.
+Walk-forward backtester that compares five long-only allocation strategies (equal weight, inverse volatility, minimum variance, max Sharpe, and Hierarchical Risk Parity) against a benchmark, after trading costs, with separate results for the 2020 and 2022 stress periods.
 
-![Project Status](https://img.shields.io/badge/status-active-success)
-![Python Version](https://img.shields.io/badge/python-3.x-blue)
-![Finance](https://img.shields.io/badge/domain-Quantitative%20Finance-green)
+> v2 is in progress. Results and write-up land with Phase 2 (market-regime detector). Design doc and plans are in `docs/superpowers/`.
 
-## 📖 Project Overview
-Constructing an investment portfolio that balances risk and reward is often done manually or with basic heuristics. This project applies **Modern Portfolio Theory (MPT)** to mathematically solve for the "Optimal Portfolio."
+## How it works
 
-It uses a **Monte Carlo simulation** (10,000+ iterations) to visualize the Efficient Frontier and utilizes **SciPy's optimization engine** to calculate the exact asset weights that maximize the Sharpe Ratio.
+| Module | Job |
+|---|---|
+| `rapo/data.py` | Adjusted prices from Yahoo Finance, cached to Parquet. Risk-free rate from the 13-week T-bill. |
+| `rapo/returns.py` | Simple and log returns. A newer asset is NaN before it listed; history is never truncated. |
+| `rapo/estimators.py` | Annualized means and Ledoit-Wolf shrunk covariance. |
+| `rapo/strategies.py`, `rapo/hrp.py` | The five strategies. Each takes a returns window and returns long-only weights that sum to 1. |
+| `rapo/backtest.py` | Walk-forward engine: decisions only see past data; weights drift between rebalances; costs are charged on turnover. |
+| `rapo/metrics.py` | CAGR, volatility, Sharpe, Sortino, max drawdown, Calmar, historical VaR, turnover. |
+| `rapo/montecarlo.py` | Vectorized random-portfolio cloud for the efficient frontier. |
+| `rapo/report.py` | Runs every strategy through the same backtest and builds the comparison tables. |
+| `api/main.py` | FastAPI endpoint the web app calls. |
+| `web/` | React + TypeScript research dashboard. |
 
-**Key Features:**
-* **Automated Data Pipeline:** Fetches real-time adjusted close prices via `yfinance`.
-* **Mathematical Optimization:** Uses `scipy.optimize.minimize` (SLSQP method) to solve for max risk-adjusted returns.
-* **Risk Analysis:** Calculates annualized volatility, expected returns, and covariance matrices.
-* **Visual Analytics:** Generates an "Efficient Frontier" scatter plot and an allocation pie chart.
+## Run it
 
----
-
-## 🛠️ Tech Stack
-* **Core Logic:** `Python`, `NumPy`, `Pandas`
-* **Optimization:** `SciPy` (Linear Programming/Minimization)
-* **Visualization:** `Matplotlib`, `Seaborn`
-* **Data Source:** `Yahoo Finance API (yfinance)`
-
----
-
-## 📊 How It Works
-The application follows a modular "Separation of Concerns" design pattern:
-
-1.  **Data Ingestion (`data_loader.py`):** Downloads historical price data and cleans it (handling missing values/holidays).
-2.  **Financial Math (`portfolio_math.py`):**
-    * Calculates **Log Returns** (more additive/statistically sound than simple returns).
-    * Constructs the **Covariance Matrix** to measure how assets move together.
-    * Runs the **Monte Carlo Simulation** to generate the risk/return cloud.
-    * Runs the **Optimizer** to find the specific weights for the Max Sharpe Ratio.
-3.  **Visualization (`visualizer.py`):** Plots the results using a professional Seaborn style.
-
----
-
-## 🚀 Quick Start
-
-### 1. Clone the Repository
 ```bash
-git clone [https://github.com/YOUR_USERNAME/Portfolio_Optimizer.git](https://github.com/YOUR_USERNAME/Portfolio_Optimizer.git)
-cd Portfolio_Optimizer
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn api.main:app --reload                       # API on :8000
+
+cd web && npm install && npm run dev                 # UI on http://localhost:5173
+```
+
+`http://localhost:5173/?demo=1` runs the UI on bundled synthetic data without the API.
+
+## Tests
+
+```bash
+python -m pytest          # Python package and API
+cd web && npm test        # frontend
+```
+
+Research tool, not investment advice.
