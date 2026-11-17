@@ -75,3 +75,9 @@ def test_summary_has_all_fields():
     assert {"cagr", "ann_vol", "sharpe", "sortino", "max_drawdown", "calmar",
             "var_95", "annual_turnover"} <= set(s.index)
     assert s["annual_turnover"] == pytest.approx(1.5)
+
+
+def test_sharpe_nan_for_constant_excess_returns():
+    r = pd.Series(0.0, index=IDX)
+    rf = pd.Series(0.0001, index=IDX)
+    assert np.isnan(sharpe(r, rf))

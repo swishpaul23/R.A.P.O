@@ -32,7 +32,7 @@ def ann_vol(r: pd.Series) -> float:
 def sharpe(r: pd.Series, rf: pd.Series) -> float:
     ex = _excess(r, rf)
     sd = ex.std()
-    return float(ex.mean() * TRADING_DAYS / (sd * np.sqrt(TRADING_DAYS))) if sd > 0 else float("nan")
+    return float(ex.mean() * TRADING_DAYS / (sd * np.sqrt(TRADING_DAYS))) if sd > 1e-12 else float("nan")
 
 
 def sortino(r: pd.Series, rf: pd.Series) -> float:
