@@ -93,7 +93,7 @@ def fetch_prices(tickers: list[str], start: str, end: str,
     columns = {t: _load_one(t, s, e, cache_dir, downloader) for t in tickers}
     missing = [t for t, col in columns.items() if col.empty]
     if missing:
-        raise ValueError(f"No price data for: {', '.join(missing)}. Check the ticker symbols.")
+        raise ValueError(f"No price data for: {', '.join(missing)}. Check the symbol and your internet connection.")
     df = pd.concat(columns.values(), axis=1, join="outer").sort_index()
     df.columns = list(tickers)
     df.index.name = "date"
