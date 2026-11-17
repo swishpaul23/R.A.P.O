@@ -1,0 +1,3 @@
+"""R.A.P.O: Robo-Advisor Portfolio Optimizer."""
+
+__version__ = "2.0.0.dev0"
