@@ -24,6 +24,8 @@ TICKERS = [
     "GLD", "VNQ",                               # gold, real estate
     "XLP", "XLU", "XLK",                        # sectors
     "NVDA", "AAPL", "MSFT",                     # single stocks
+    "HYG", "SHY", "BIL",                        # credit, short T-bills
+    "^VIX", "^TNX",                             # volatility index, 10-year yield
     RISK_FREE_TICKER,                           # risk-free rate
 ]
 START = "2005-01-01"

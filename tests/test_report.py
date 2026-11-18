@@ -3,6 +3,7 @@ import pytest
 
 from rapo.metrics import STRESS_WINDOWS
 from rapo.report import DEFAULT_STRATEGIES, Report, build_report
+from rapo.strategies import fixed_weights
 
 KW = dict(lookback=60, rebalance_every=20)
 
@@ -40,3 +41,11 @@ def test_stress_tables_include_turnover_inside_the_window(synthetic_prices, flat
     t = rep.stress_tables["2022 rate shock"]
     assert t.loc["HRP", "annual_turnover"] > 0
     assert pd.isna(t.loc["BENCH", "annual_turnover"])
+
+
+def test_extra_benchmarks_appear_as_rows(synthetic_prices, flat_rf):
+    rep = build_report(synthetic_prices, flat_rf, benchmark="BENCH",
+                       extra_benchmarks={"60/40": fixed_weights({"EQ": 0.6, "BOND": 0.4})}, **KW)
+    assert "60/40" in rep.table.index
+    assert "60/40" in rep.results
+    assert all("60/40" in t.index for t in rep.stress_tables.values())
