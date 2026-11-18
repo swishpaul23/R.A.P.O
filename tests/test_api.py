@@ -18,6 +18,7 @@ UNIVERSE = {
     "TLT": _walk(2, 0.0001, 0.008),
     "GLD": _walk(3, 0.0002, 0.009),
     "FLAT": pd.Series(100.0, index=IDX),
+    "LATE": _walk(4, 0.0005, 0.02).loc["2023-06-01":],
 }
 
 
@@ -134,3 +135,10 @@ def test_both_sources_failing_returns_the_live_error():
     res = TestClient(app).post("/api/backtest", json=BODY)
     assert res.status_code == 400
     assert "internet connection" in res.json()["detail"]
+
+
+def test_reports_which_assets_were_eligible_at_the_last_rebalance(client):
+    body = {**BODY, "tickers": ["TLT", "GLD", "SPY", "LATE"], "lookback": 252}
+    data = client.post("/api/backtest", json=body).json()
+    assert data["eligible"] == ["TLT", "GLD", "SPY"]
+    assert data["weights"]["Equal weight"]["LATE"] == 0

@@ -32,6 +32,7 @@ export interface BacktestResponse {
     drawdown: Record<string, number[]>;
   };
   weights: Record<string, Record<string, number>>;
+  eligible?: string[];
   correlation: { tickers: string[]; matrix: number[][] } | null;
   clusters: { order: string[]; linkage: number[][] } | null;
   frontier: {
