@@ -56,15 +56,18 @@ def _sharpe(excess: pd.Series) -> float:
     return float(excess.mean() / sd * np.sqrt(252)) if sd > 0 else float("nan")
 
 
-def run_study(prices: pd.DataFrame, rf: pd.Series, universe: list[str], start: str,
-              min_train: int = 750, refit_every: int = 21, hmm_refit_every: int = 63,
-              lookback: int = 252, cost_bps: float = 10.0, bootstrap_n: int = 1000) -> dict:
+def prepare_prices(prices: pd.DataFrame, start: str) -> pd.DataFrame:
+    """Stock-market trading days from `start`, with index levels (^VIX, ^TNX) forward-filled."""
     prices = prices.loc[pd.Timestamp(start):]
-    prices = prices[prices["SPY"].notna()].copy()        # stock-market trading days only
+    prices = prices[prices["SPY"].notna()].copy()
     levels = [c for c in prices.columns if c.startswith("^")]
     prices[levels] = prices[levels].ffill()
+    return prices
 
-    # 1. Forecasts.
+
+def compute_probas(prices: pd.DataFrame, min_train: int = 750, refit_every: int = 21,
+                   hmm_refit_every: int = 63) -> tuple[dict[str, pd.Series], pd.DataFrame, pd.Series]:
+    """Walk-forward stress probabilities for every model, plus the features and labels used."""
     feats = build_features(prices)
     feats = feats.loc[:, feats.notna().any()]          # e.g. no ^IRX -> drop 'curve'
     labels = stress_label(prices["SPY"])
@@ -75,6 +78,17 @@ def run_study(prices: pd.DataFrame, rf: pd.Series, universe: list[str], start: s
         "logistic": walk_forward_proba(feats, labels, logistic, min_train, refit_every),
         "boosting": walk_forward_proba(feats, labels, boosting, min_train, refit_every),
     }
+    return probas, feats, labels
+
+
+def run_study(prices: pd.DataFrame, rf: pd.Series, universe: list[str], start: str,
+              min_train: int = 750, refit_every: int = 21, hmm_refit_every: int = 63,
+              lookback: int = 252, cost_bps: float = 10.0, bootstrap_n: int = 1000,
+              precomputed: tuple | None = None) -> dict:
+    prices = prepare_prices(prices, start)
+
+    # 1. Forecasts.
+    probas, feats, labels = precomputed or compute_probas(prices, min_train, refit_every, hmm_refit_every)
     common = pd.concat(probas, axis=1).join(labels).dropna().index
     # Climatology: always forecast the historical stress rate known at the time (labels end 21 days back).
     climatology = labels.expanding().mean().shift(21)
