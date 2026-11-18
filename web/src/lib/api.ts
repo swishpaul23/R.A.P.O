@@ -1,5 +1,6 @@
 export interface MetricRow {
   name: string;
+  total_return?: number | null;
   cagr: number | null;
   ann_vol: number | null;
   sharpe: number | null;
