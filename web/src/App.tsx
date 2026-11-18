@@ -9,12 +9,13 @@ import ParamsForm from "./components/ParamsForm";
 import ResultsTable from "./components/ResultsTable";
 import { ApiError, runBacktest, type BacktestResponse } from "./lib/api";
 import { downloadCsv } from "./lib/csv";
+import { localISODate } from "./lib/date";
 import { parseTickers, type ParamsInput } from "./lib/validate";
 import { colorFor } from "./lib/theme";
 
 const EquityChart = lazy(() => import("./components/EquityChart"));
 
-const today = new Date().toISOString().slice(0, 10);
+const today = localISODate();
 const DEFAULTS: ParamsInput = {
   tickers: "SPY, TLT, GLD, NVDA, XLP", benchmark: "SPY", start: "2015-01-01", end: today,
   lookback: "252", rebalance: "63", cost: "10",

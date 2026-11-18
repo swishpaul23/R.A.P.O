@@ -116,8 +116,10 @@ def _run(req: BacktestRequest, prices_loader, rf_loader) -> dict:
         strat_points = []
         for name, w in weights.items():
             wv = pd.Series(w).reindex(cols).fillna(0.0).to_numpy()
-            strat_points.append({"name": name, "ret": float(wv @ mu.to_numpy()),
-                                 "vol": float(np.sqrt(wv @ cov.to_numpy() @ wv))})
+            ret = float(wv @ mu.to_numpy())
+            vol = float(np.sqrt(wv @ cov.to_numpy() @ wv))
+            strat_points.append({"name": name, "ret": ret, "vol": vol,
+                                 "sharpe": (ret - rf_annual) / vol if vol > 0 else None})
         frontier = {"points": cloud[["vol", "ret", "sharpe"]].round(5).to_dict("records"),
                     "strategies": strat_points}
 
