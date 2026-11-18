@@ -1,4 +1,4 @@
-import { AlertCircle, Download, Eye, EyeOff } from "lucide-react";
+import { AlertCircle, Database, Download, Eye, EyeOff } from "lucide-react";
 import { lazy, Suspense, useMemo, useRef, useState } from "react";
 import AllocationBars from "./components/AllocationBars";
 import CorrelationHeatmap from "./components/CorrelationHeatmap";
@@ -119,6 +119,16 @@ export default function App() {
           <div role="alert" className="flex items-start gap-3 rounded-xl border border-loss/40 bg-loss/10 px-4 py-3 text-sm text-fg">
             <AlertCircle className="mt-0.5 size-4 shrink-0 text-loss" aria-hidden="true" />
             <span>{error}</span>
+          </div>
+        )}
+
+        {data?.meta.data_source === "snapshot" && (
+          <div role="status" className="flex items-start gap-3 rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-fg">
+            <Database className="mt-0.5 size-4 shrink-0 text-warn" aria-hidden="true" />
+            <span>
+              Live prices are unavailable, so these results use a saved snapshot of real historical prices.
+              Recent days may be missing.
+            </span>
           </div>
         )}
 

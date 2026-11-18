@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from rapo.data import fetch_prices, risk_free_daily
+from rapo.data import default_cache_dir, fetch_prices, risk_free_daily, snapshot_downloader
 
 DAYS = pd.bdate_range("2024-01-01", "2024-03-29")
 
@@ -59,3 +59,30 @@ def test_risk_free_daily_converts_percent(tmp_path, fake):
     rf = risk_free_daily("2024-01-01", "2024-01-31", tmp_path, fake)
     assert len(rf) > 0
     assert rf.to_numpy() == pytest.approx(0.0504 / 252)
+
+
+def test_default_cache_dir_respects_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("RAPO_CACHE_DIR", str(tmp_path / "c"))
+    assert default_cache_dir() == tmp_path / "c"
+
+
+def test_default_cache_dir_uses_tmp_on_vercel(monkeypatch):
+    monkeypatch.delenv("RAPO_CACHE_DIR", raising=False)
+    monkeypatch.setenv("VERCEL", "1")
+    assert str(default_cache_dir()).startswith("/tmp")
+
+
+def test_default_cache_dir_local(monkeypatch):
+    monkeypatch.delenv("RAPO_CACHE_DIR", raising=False)
+    monkeypatch.delenv("VERCEL", raising=False)
+    assert str(default_cache_dir()).replace("\\", "/") == ".cache/prices"
+
+
+def test_snapshot_downloader_reads_csv_and_slices(tmp_path):
+    s = pd.Series([1.0, 2.0, 3.0], index=pd.bdate_range("2024-01-01", periods=3), name="price")
+    s.index.name = "date"
+    s.to_csv(tmp_path / "_IRX.csv")
+    dl = snapshot_downloader(tmp_path)
+    out = dl("^IRX", pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03"))
+    assert out.tolist() == [2.0, 3.0]
+    assert dl("NOPE", pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-03")).empty

@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from datetime import date
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -15,7 +16,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
-from rapo.data import fetch_prices, risk_free_daily
+from rapo.data import default_cache_dir, fetch_prices, risk_free_daily, snapshot_downloader
 from rapo.estimators import annual_mean, ledoit_wolf_cov
 from rapo.hrp import hrp_linkage
 from rapo.metrics import STRESS_WINDOWS
@@ -24,6 +25,7 @@ from rapo.report import build_report
 from rapo.returns import simple_returns
 
 BENCH_COL = "__benchmark__"
+SNAPSHOT_DIR = Path(__file__).resolve().parent.parent / "data" / "snapshot"
 FRONTIER_POINTS = 3000
 
 
@@ -72,14 +74,21 @@ def _rows(table: pd.DataFrame, rename: dict[str, str]) -> list[dict]:
     return [{"name": rename.get(name, name), **row.to_dict()} for name, row in table.iterrows()]
 
 
-def _run(req: BacktestRequest, prices_loader, rf_loader) -> dict:
-    start = req.start.isoformat()
-    end = (req.end or date.today()).isoformat()
+def _dates(req: BacktestRequest) -> tuple[str, str]:
+    return req.start.isoformat(), (req.end or date.today()).isoformat()
+
+
+def _load(req: BacktestRequest, prices_loader, rf_loader) -> tuple[pd.DataFrame, pd.Series]:
+    start, end = _dates(req)
     needed = req.tickers + ([req.benchmark] if req.benchmark not in req.tickers else [])
     raw = prices_loader(needed, start, end)
+    return raw, rf_loader(start, end)
+
+
+def _run(req: BacktestRequest, raw: pd.DataFrame, rf: pd.Series, data_source: str) -> dict:
+    start, end = _dates(req)
     prices = raw[req.tickers].copy()
     prices[BENCH_COL] = raw[req.benchmark]
-    rf = rf_loader(start, end)
 
     report = build_report(prices, rf, benchmark=BENCH_COL, lookback=req.lookback,
                           rebalance_every=req.rebalance_every, cost_bps=req.cost_bps)
@@ -131,7 +140,8 @@ def _run(req: BacktestRequest, prices_loader, rf_loader) -> dict:
     return _clean({
         "meta": {"tickers": req.tickers, "benchmark": req.benchmark, "start": start, "end": end,
                  "lookback": req.lookback, "rebalance_every": req.rebalance_every,
-                 "cost_bps": req.cost_bps, "first_trade_date": dates[0].date().isoformat()},
+                 "cost_bps": req.cost_bps, "first_trade_date": dates[0].date().isoformat(),
+                 "data_source": data_source},
         "strategies": list(report.results),
         "benchmark_label": bench_label,
         "table": _rows(report.table, rename),
@@ -144,8 +154,25 @@ def _run(req: BacktestRequest, prices_loader, rf_loader) -> dict:
     })
 
 
+def snapshot_loaders(snapshot_dir: Path = SNAPSHOT_DIR) -> tuple[Callable, Callable] | None:
+    """Loaders that read the committed price snapshot, or None if there isn't one."""
+    if not snapshot_dir.is_dir():
+        return None
+    dl = snapshot_downloader(snapshot_dir)
+    cache = default_cache_dir() / "snapshot"
+    return (lambda t, s, e: fetch_prices(t, s, e, cache, dl),
+            lambda s, e: risk_free_daily(s, e, cache, dl))
+
+
+_DEFAULT = object()
+
+
 def create_app(prices_loader: Callable = fetch_prices,
-               rf_loader: Callable = risk_free_daily) -> FastAPI:
+               rf_loader: Callable = risk_free_daily,
+               fallback: tuple[Callable, Callable] | None | object = _DEFAULT) -> FastAPI:
+    """`fallback` = (prices_loader, rf_loader) used when live data fails (default: the committed snapshot)."""
+    if fallback is _DEFAULT:
+        fallback = snapshot_loaders()
     app = FastAPI(title="R.A.P.O API", version="2.0.0")
     app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173"],
                        allow_methods=["*"], allow_headers=["*"])
@@ -157,7 +184,18 @@ def create_app(prices_loader: Callable = fetch_prices,
     @app.post("/api/backtest")
     def backtest(req: BacktestRequest):
         try:
-            return _run(req, prices_loader, rf_loader)
+            try:
+                raw, rf = _load(req, prices_loader, rf_loader)
+                source = "live"
+            except ValueError as live_error:
+                if fallback is None:
+                    raise
+                try:
+                    raw, rf = _load(req, *fallback)
+                    source = "snapshot"
+                except ValueError:
+                    raise live_error from None
+            return _run(req, raw, rf, source)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 

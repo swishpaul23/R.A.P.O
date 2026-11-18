@@ -20,6 +20,7 @@ export interface BacktestResponse {
     rebalance_every: number;
     cost_bps: number;
     first_trade_date: string;
+    data_source?: "live" | "snapshot";
   };
   strategies: string[];
   benchmark_label: string;
