@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
+from rapo.backtest import eligible_assets
 from rapo.data import default_cache_dir, fetch_prices, risk_free_daily, snapshot_downloader
 from rapo.estimators import annual_mean, ledoit_wolf_cov
 from rapo.hrp import hrp_linkage
@@ -109,6 +110,8 @@ def _run(req: BacktestRequest, raw: pd.DataFrame, rf: pd.Series, data_source: st
 
     # Snapshot views use the most recent lookback window with complete data.
     universe = simple_returns(prices[req.tickers])
+    last_rebalance = next(iter(report.results.values())).weights.index[-1]
+    eligible = eligible_assets(universe, universe.index.get_loc(last_rebalance), req.lookback)
     recent = universe.iloc[-req.lookback:].dropna(axis=1, how="any")
     correlation = clusters = frontier = None
     if recent.shape[0] >= 20 and recent.shape[1] >= 1:
@@ -148,6 +151,7 @@ def _run(req: BacktestRequest, raw: pd.DataFrame, rf: pd.Series, data_source: st
         "stress": stress,
         "series": {"dates": [d.date().isoformat() for d in dates], "equity": equity, "drawdown": drawdown},
         "weights": weights,
+        "eligible": eligible,
         "correlation": correlation,
         "clusters": clusters,
         "frontier": frontier,
