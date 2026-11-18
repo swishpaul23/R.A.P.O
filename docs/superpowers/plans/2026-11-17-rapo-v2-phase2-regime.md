@@ -6,7 +6,7 @@
 
 **Architecture:** A new `rapo/regime/` package: features → labels → walk-forward probabilities (VIX rule, HMM, logistic, gradient boosting) → evaluation → an overlay `Strategy` that plugs into the existing backtest. Training is slow (hundreds of refits), so `scripts/run_regime_study.py` runs offline on the committed price snapshot and writes `data/regime/latest.json`. The API serves that file; the UI adds a stress reading and a cycle chart.
 
-**Tech Stack:** Python, pandas, scikit-learn (LogisticRegression, HistGradientBoostingClassifier, isotonic calibration), hmmlearn (offline only), FastAPI, React.
+**Tech Stack:** Python, pandas, scikit-learn (LogisticRegression, isotonic calibration), XGBoost and hmmlearn (offline only), FastAPI, React.
 
 **Spec:** Notion → Coding / PROJECTS DOCS / R.A.P.O v2 / Design Doc, sections 6 (Phase 2) and 9 (Phase 1 findings).
 
@@ -19,7 +19,7 @@
 - Overlay: tilt = 0.40 × clip((p̂ − 0.20) / 0.80, 0, 1), where p̂ is a 5-day EMA of the probability. Defensive sleeve = 50% SHY, 50% GLD. Overlay backtests rebalance every 21 days; plain HRP / equal weight are also reported at 21 days so the comparison is like-for-like.
 - Benchmarks: SPY buy-and-hold and 60/40 (SPY/AGG, rebalanced every 63 days).
 - A result counts as a win only if the 95% block-bootstrap interval (21-day blocks, 1,000 resamples, seed 0) of the difference excludes zero.
-- `hmmlearn` goes in `requirements-dev.txt` only; the deployed API never trains.
+- `xgboost` and `hmmlearn` go in `requirements-dev.txt` only; the deployed API never trains.
 
 ## Review Focus
 
@@ -87,7 +87,7 @@
 
 **Interfaces:**
 - Produces:
-  - `ModelFactory = Callable[[], ClassifierMixin]`; `logistic() -> Pipeline` (StandardScaler + LogisticRegression C=0.5, class_weight="balanced"); `boosting() -> HistGradientBoostingClassifier` (max_depth=3, learning_rate=0.05, max_iter=200, l2_regularization=1.0).
+  - `ModelFactory = Callable[[], ClassifierMixin]`; `logistic() -> Pipeline` (StandardScaler + LogisticRegression C=0.5, class_weight="balanced"); `boosting() -> XGBClassifier` (max_depth=3, learning_rate=0.05, n_estimators=200, subsample=0.8, colsample_bytree=0.8, reg_lambda=1.0, min_child_weight=5, eval_metric="logloss", random_state=0). Add `xgboost>=2.0` to `requirements-dev.txt`.
   - `vix_rule(features: pd.DataFrame, threshold: float = 30) -> pd.Series` (1.0 if vix > threshold else 0.0).
   - `walk_forward_proba(features, labels, factory, min_train=750, refit_every=21, gap=21, calibrate=True) -> pd.Series`. For each refit date `d`, train on rows with date ≤ d − gap rows and non-NaN label; predict rows `d … d + refit_every − 1`. NaN before `min_train`. Calibration: `CalibratedClassifierCV(method="isotonic", cv=TimeSeriesSplit(3))`, falling back to uncalibrated if a split has one class. A training set with one class returns its base rate for the block.
 
