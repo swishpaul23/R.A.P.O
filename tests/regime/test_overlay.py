@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from rapo.regime.overlay import make_regime_overlay, tilt_from_proba
+from rapo.regime.overlay import make_regime_overlay, make_tilt_overlay, percentile_tilt, tilt_from_proba
 from rapo.strategies import equal_weight
 
 
@@ -60,3 +60,36 @@ def test_weights_valid(window):
     for p in (0.0, 0.33, 0.7, 1.0):
         w = overlay(p, window)
         assert (w >= 0).all() and w.sum() == pytest.approx(1.0)
+
+
+def test_percentile_tilt_is_zero_without_enough_history():
+    s = pd.Series(np.arange(300.0), index=pd.bdate_range("2020-01-01", periods=300))
+    t = percentile_tilt(s, q=0.8, min_history=252, span=1)
+    assert (t.iloc[:251] == 0).all()
+
+
+def test_percentile_tilt_is_full_when_signal_hits_new_highs():
+    s = pd.Series(np.arange(400.0), index=pd.bdate_range("2020-01-01", periods=400))
+    t = percentile_tilt(s, q=0.8, min_history=252, span=1)
+    assert t.iloc[-1] == pytest.approx(0.40)
+
+
+def test_percentile_tilt_is_zero_when_signal_is_low():
+    s = pd.Series(np.r_[np.arange(300.0), np.zeros(50)], index=pd.bdate_range("2020-01-01", periods=350))
+    t = percentile_tilt(s, q=0.8, min_history=252, span=1)
+    assert t.iloc[-1] == 0.0
+
+
+def test_percentile_tilt_has_no_lookahead():
+    rng = np.random.default_rng(4)
+    s = pd.Series(rng.normal(size=500), index=pd.bdate_range("2020-01-01", periods=500))
+    shocked = s.copy()
+    shocked.iloc[401:] = 100.0
+    a, b = percentile_tilt(s, q=0.9), percentile_tilt(shocked, q=0.9)
+    assert a.iloc[:401].equals(b.iloc[:401])
+
+
+def test_tilt_overlay_uses_given_tilt(window):
+    t = const(0.4, window)
+    w = make_tilt_overlay(equal_weight, t, base_assets=["SPY", "EFA"])(window)
+    assert w.to_dict() == pytest.approx({"SPY": 0.3, "EFA": 0.3, "SHY": 0.2, "GLD": 0.2})

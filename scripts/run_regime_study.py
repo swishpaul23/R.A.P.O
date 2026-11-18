@@ -19,7 +19,8 @@ sys.path.insert(0, str(ROOT))
 
 from rapo.data import fetch_prices, risk_free_daily, snapshot_downloader  # noqa: E402
 from rapo.regime.features import REQUIRED  # noqa: E402
-from rapo.regime.study import run_study  # noqa: E402
+from rapo.regime.round2 import run_round2  # noqa: E402
+from rapo.regime.study import compute_probas, prepare_prices, run_study  # noqa: E402
 
 UNIVERSE = ["SPY", "QQQ", "EFA", "EEM", "TLT", "IEF", "GLD", "VNQ"]
 START = "2005-01-01"
@@ -76,6 +77,44 @@ def markdown(res: dict) -> str:
     return "\n".join(out)
 
 
+def round2_markdown(r2: dict) -> str:
+    p, ch = r2["periods"], r2["chosen"]
+    out = [
+        "# Phase 2, round 2: tuned on 2010-2019, tested once on 2020+",
+        "",
+        "Protocol: `phase2-round2-protocol.md` (committed before this run).",
+        f"Development: {p['development_start']} to 2019-12-31. Holdout: {p['holdout_start']} to {p['holdout_end']}.",
+        "",
+        "## Development (all 6 candidates)",
+        "",
+        "| Signal | q | Avg Sharpe gain | EW gain | HRP gain | Avg tilt | Whipsaws |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for c in r2["development"]:
+        mark = " **(chosen)**" if (c["signal"], c["q"]) == (ch["signal"], ch["q"]) else ""
+        g = c["sharpe_gain"]
+        out.append(f"| {c['signal']}{mark} | {c['q']:.2f} | {num(c['score'], 3)} | {num(g['Equal weight'], 3)} | "
+                   f"{num(g['HRP'], 3)} | {pct(c['avg_tilt'])} | {c['whipsaws']} |")
+    h = r2["holdout"]
+    out += ["", f"## Holdout: {ch['signal']} at q = {ch['q']:.2f}", "",
+            f"Average tilt {pct(h['avg_tilt'])}, {h['whipsaws']} whipsaws.", "",
+            "| Strategy | CAGR | Vol | Sharpe | Max DD | Turnover/yr |", "|---|---|---|---|---|---|"]
+    for r in h["table"]:
+        out.append(f"| {r['name']} | {pct(r['cagr'])} | {pct(r['ann_vol'])} | {num(r['sharpe'])} | "
+                   f"{pct(r['max_drawdown'])} | {num(r['annual_turnover'])} |")
+    for w, rows in h["stress_windows"].items():
+        out += ["", f"### {w}", "", "| Strategy | Return | Max DD | Sharpe |", "|---|---|---|---|"]
+        for r in rows:
+            out.append(f"| {r['name']} | {pct(r['total_return'])} | {pct(r['max_drawdown'])} | {num(r['sharpe'])} |")
+    out += ["", "### Overlay minus base, 95% block bootstrap", "",
+            "| Base | Metric | Difference | 95% interval | Significant |", "|---|---|---|---|---|"]
+    for b in h["bootstrap"]:
+        f = pct if b["metric"] == "max_drawdown" else num
+        out.append(f"| {b['base']} | {b['metric']} | {f(b['diff'])} | {f(b['lo'])} to {f(b['hi'])} | "
+                   f"{'yes' if b['significant'] else 'no'} |")
+    return "\n".join(out) + "\n"
+
+
 def main() -> None:
     t0 = time.time()
     tickers = sorted(set(UNIVERSE + REQUIRED + ["SHY", "AGG", "^IRX"]))
@@ -84,13 +123,20 @@ def main() -> None:
     as_of = (SNAPSHOT / "AS_OF.txt").read_text().strip()
     prices = fetch_prices(tickers, START, as_of, cache, dl)
     rf = risk_free_daily(START, as_of, cache, dl)
-    res = run_study(prices, rf, UNIVERSE, START)
+    prepared = prepare_prices(prices, START)
+    pre = compute_probas(prepared)
+    res = run_study(prices, rf, UNIVERSE, START, precomputed=pre)
+    probas, feats, _ = pre
+    signals = {"logistic": probas["logistic"], "hmm": probas["hmm"], "vol_21": feats["vol_21"]}
+    res["round2"] = run_round2(prepared, rf, UNIVERSE, signals, split="2020-01-01")
+    (ROOT / "docs" / "results" / "phase2-round2.md").parent.mkdir(parents=True, exist_ok=True)
+    (ROOT / "docs" / "results" / "phase2-round2.md").write_text(round2_markdown(res["round2"]))
 
     (ROOT / "data" / "regime").mkdir(parents=True, exist_ok=True)
     (ROOT / "data" / "regime" / "latest.json").write_text(json.dumps(res, allow_nan=False, separators=(",", ":")))
     (ROOT / "docs" / "results").mkdir(parents=True, exist_ok=True)
     (ROOT / "docs" / "results" / "phase2.md").write_text(markdown(res))
-    print(markdown(res))
+    print(round2_markdown(res["round2"]))
     print(f"Done in {time.time() - t0:.0f}s")
 
 
