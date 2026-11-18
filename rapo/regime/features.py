@@ -20,7 +20,12 @@ def build_features(prices: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Regime features need price data for: {', '.join(missing)}. "
                          "Re-run scripts/make_snapshot.py.")
+    # Work on stock-market trading days only: index levels (^VIX) sometimes quote on
+    # exchange holidays, and a missing SPY day would otherwise blank out every rolling window.
     p = prices.sort_index()
+    p = p[p["SPY"].notna()].copy()
+    levels = [c for c in p.columns if c.startswith("^")]
+    p[levels] = p[levels].ffill()  # rate/vol index missing on a trading day: carry the last value
     spy_r = p["SPY"].pct_change(fill_method=None)
     tlt_r = p["TLT"].pct_change(fill_method=None)
 
