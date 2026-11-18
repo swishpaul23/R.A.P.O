@@ -35,3 +35,24 @@ def synthetic_prices() -> pd.DataFrame:
 @pytest.fixture
 def flat_rf(synthetic_prices) -> pd.Series:
     return pd.Series(0.0001, index=synthetic_prices.index)
+
+
+def regime_prices(n: int = 1500, seed: int = 7) -> pd.DataFrame:
+    """Synthetic prices for every ticker the regime features need, plus a few assets."""
+    rng = np.random.default_rng(seed)
+    idx = pd.bdate_range("2010-01-01", periods=n)
+    def walk(mu, sigma):
+        return 100 * np.cumprod(1 + rng.normal(mu, sigma, n))
+    return pd.DataFrame({
+        "SPY": walk(0.0004, 0.011), "TLT": walk(0.0001, 0.009), "IEF": walk(0.0001, 0.004),
+        "HYG": walk(0.0002, 0.005), "GLD": walk(0.0002, 0.009), "SHY": walk(0.00005, 0.001),
+        "AGG": walk(0.0001, 0.003),
+        "^VIX": np.clip(18 + np.cumsum(rng.normal(0, 0.8, n)) * 0.2, 9, 80),
+        "^TNX": np.clip(2.5 + np.cumsum(rng.normal(0, 0.03, n)), 0.3, 8),
+        "^IRX": np.clip(1.0 + np.cumsum(rng.normal(0, 0.02, n)), 0.0, 6),
+    }, index=idx)
+
+
+@pytest.fixture
+def regime_px() -> pd.DataFrame:
+    return regime_prices()
