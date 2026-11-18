@@ -19,6 +19,11 @@ def _excess(r: pd.Series, rf: pd.Series) -> pd.Series:
     return r - rf_aligned.fillna(0.0)
 
 
+def total_return(r: pd.Series) -> float:
+    """Compounded gain over the whole series, not annualized."""
+    return float((1.0 + r).prod() - 1.0)
+
+
 def cagr(r: pd.Series) -> float:
     growth = float((1.0 + r).prod())
     years = len(r) / TRADING_DAYS
@@ -64,6 +69,7 @@ def var_hist(r: pd.Series, level: float = 0.95) -> float:
 def summary(r: pd.Series, rf: pd.Series, turnover: pd.Series | None = None) -> pd.Series:
     years = len(r) / TRADING_DAYS
     return pd.Series({
+        "total_return": total_return(r),
         "cagr": cagr(r),
         "ann_vol": ann_vol(r),
         "sharpe": sharpe(r, rf),

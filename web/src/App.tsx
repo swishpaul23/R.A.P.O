@@ -67,6 +67,10 @@ export default function App() {
     if (period === FULL) return data.table;
     return data.stress.find((s) => s.window === period)?.rows ?? data.table;
   }, [data, period]);
+  const windowRange = useMemo(() => {
+    const w = data?.stress.find((s) => s.window === period);
+    return w ? { from: w.start, to: w.end } : undefined;
+  }, [data, period]);
   const focusRow = rows.find((r) => r.name === focus);
   const benchRow = data ? rows.find((r) => r.name === data.benchmark_label) : undefined;
   const periods = [FULL, ...(data?.stress.map((s) => s.window) ?? [])];
@@ -140,7 +144,7 @@ export default function App() {
           </div>
         )}
 
-        <KpiStrip row={focusRow} bench={benchRow} loading={loading} />
+        <KpiStrip row={focusRow} bench={benchRow} loading={loading} isWindow={period !== FULL} />
 
         <Panel title={mode === "equity" ? "Growth of $1" : "Drawdown"}
           subtitle="Out-of-sample, net of costs. Shaded bands are stress windows."
@@ -149,7 +153,7 @@ export default function App() {
           {loading ? <Skeleton className="h-[320px] w-full md:h-[380px]" /> : data ? (
             <>
               <Suspense fallback={<Skeleton className="h-[320px] w-full md:h-[380px]" />}>
-                <EquityChart data={data} mode={mode} focus={focus} hidden={hidden} />
+                <EquityChart data={data} mode={mode} focus={focus} hidden={hidden} range={windowRange} />
               </Suspense>
               <ul className="mt-3 flex flex-wrap gap-2" aria-label="Series">
                 {[...data.strategies, data.benchmark_label].map((n) => {
@@ -192,7 +196,7 @@ export default function App() {
         <div ref={resultsRef}>
           <Panel title="Strategy comparison" subtitle={period === FULL ? "Full out-of-sample period" : `Stress window: ${period}`}>
             {loading ? <Skeleton className="h-64 w-full" /> : data ? (
-              <ResultsTable rows={rows} benchmarkLabel={data.benchmark_label} focus={focus} onFocus={choose} />
+              <ResultsTable rows={rows} benchmarkLabel={data.benchmark_label} focus={focus} onFocus={choose} isWindow={period !== FULL} />
             ) : (
               <div className="rounded-lg border border-line">
                 <div className="border-b border-line bg-raised px-3 py-3 text-xs text-fg-2">Strategy · CAGR · Volatility · Sharpe · Max DD</div>

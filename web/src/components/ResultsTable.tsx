@@ -2,18 +2,22 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { MetricRow } from "../lib/api";
 import { fmtNum, fmtPct, toneOf } from "../lib/format";
+import { GLOSSARY } from "../lib/glossary";
 import { colorFor } from "../lib/theme";
+import InfoTip from "./InfoTip";
 
 type Key = keyof Omit<MetricRow, "name">;
-const COLS: { key: Key; label: string; fmt: (v: number | null) => string; tone?: boolean }[] = [
-  { key: "cagr", label: "CAGR", fmt: (v) => fmtPct(v), tone: true },
-  { key: "ann_vol", label: "Volatility", fmt: (v) => fmtPct(v) },
-  { key: "sharpe", label: "Sharpe", fmt: (v) => fmtNum(v) },
-  { key: "sortino", label: "Sortino", fmt: (v) => fmtNum(v) },
-  { key: "max_drawdown", label: "Max DD", fmt: (v) => fmtPct(v, 1), tone: true },
-  { key: "calmar", label: "Calmar", fmt: (v) => fmtNum(v) },
-  { key: "var_95", label: "VaR 95", fmt: (v) => fmtPct(v) },
-  { key: "annual_turnover", label: "Turnover", fmt: (v) => (v == null ? "—" : `${fmtNum(v)}×`) },
+type Col = { key: Key; label: string; term: string; fmt: (v: number | null | undefined) => string; tone?: boolean };
+const RETURN_FULL: Col = { key: "cagr", label: "CAGR", term: "CAGR", fmt: (v) => fmtPct(v), tone: true };
+const RETURN_WINDOW: Col = { key: "total_return", label: "Return", term: "Return in window", fmt: (v) => fmtPct(v), tone: true };
+const REST: Col[] = [
+  { key: "ann_vol", label: "Volatility", term: "Volatility", fmt: (v) => fmtPct(v) },
+  { key: "sharpe", label: "Sharpe", term: "Sharpe", fmt: (v) => fmtNum(v) },
+  { key: "sortino", label: "Sortino", term: "Sortino", fmt: (v) => fmtNum(v) },
+  { key: "max_drawdown", label: "Max DD", term: "Max drawdown", fmt: (v) => fmtPct(v, 1), tone: true },
+  { key: "calmar", label: "Calmar", term: "Calmar", fmt: (v) => fmtNum(v) },
+  { key: "var_95", label: "VaR 95", term: "VaR 95% (1 day)", fmt: (v) => fmtPct(v) },
+  { key: "annual_turnover", label: "Turnover", term: "Turnover / yr", fmt: (v) => (v == null ? "—" : `${fmtNum(v)}×`) },
 ];
 
 interface Props {
@@ -21,9 +25,11 @@ interface Props {
   benchmarkLabel: string;
   focus: string;
   onFocus: (name: string) => void;
+  isWindow: boolean;
 }
 
-export default function ResultsTable({ rows, benchmarkLabel, focus, onFocus }: Props) {
+export default function ResultsTable({ rows, benchmarkLabel, focus, onFocus, isWindow }: Props) {
+  const COLS = [isWindow ? RETURN_WINDOW : RETURN_FULL, ...REST];
   const [sort, setSort] = useState<{ key: Key; desc: boolean } | null>(null);
   const sorted = useMemo(() => {
     if (!sort) return rows;
@@ -43,13 +49,14 @@ export default function ResultsTable({ rows, benchmarkLabel, focus, onFocus }: P
               const active = sort?.key === c.key;
               return (
                 <th key={c.key} scope="col" aria-sort={active ? (sort!.desc ? "descending" : "ascending") : "none"}
-                  className="px-1 py-1 text-right font-medium">
+                  className="whitespace-nowrap px-1 py-1 text-right font-medium">
                   <button type="button"
                     onClick={() => setSort(active ? { key: c.key, desc: !sort!.desc } : { key: c.key, desc: true })}
                     className={`inline-flex min-h-11 items-center gap-1 rounded px-2 hover:text-fg ${active ? "text-fg" : ""}`}>
                     {c.label}
                     {active && (sort!.desc ? <ArrowDown className="size-3.5" aria-hidden="true" /> : <ArrowUp className="size-3.5" aria-hidden="true" />)}
                   </button>
+                  <InfoTip term={c.term}>{GLOSSARY[c.term]}</InfoTip>
                 </th>
               );
             })}

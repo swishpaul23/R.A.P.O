@@ -11,11 +11,12 @@ interface Props {
   mode: "equity" | "drawdown";
   focus: string;
   hidden: Set<string>;
+  range?: { from: string; to: string };
 }
 
 const toTime = (d: string) => (Date.parse(d) / 1000) as UTCTimestamp;
 
-export default function EquityChart({ data, mode, focus, hidden }: Props) {
+export default function EquityChart({ data, mode, focus, hidden, range }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const lines = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
@@ -68,8 +69,12 @@ export default function EquityChart({ data, mode, focus, hidden }: Props) {
       s.setData(source[name].map((v, i) => ({ time: times[i], value: v })));
       lines.current.set(name, s);
     }
-    c.timeScale().fitContent();
-    const raf = requestAnimationFrame(() => c.timeScale().fitContent());
+    const frame = () => {
+      if (range) c.timeScale().setVisibleRange({ from: toTime(range.from), to: toTime(range.to) });
+      else c.timeScale().fitContent();
+    };
+    frame();
+    const raf = requestAnimationFrame(frame);
     return () => {
       cancelAnimationFrame(raf);
       // On unmount the chart effect above has already disposed the chart.
@@ -78,7 +83,7 @@ export default function EquityChart({ data, mode, focus, hidden }: Props) {
       lines.current.clear();
       c.removeSeries(band);
     };
-  }, [data, mode, focus]);
+  }, [data, mode, focus, range]);
 
   useEffect(() => {
     for (const [name, s] of lines.current) s.applyOptions({ visible: !hidden.has(name) });

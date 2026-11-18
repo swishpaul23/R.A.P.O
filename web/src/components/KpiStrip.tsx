@@ -1,19 +1,24 @@
 import type { MetricRow } from "../lib/api";
 import { fmtNum, fmtPct, toneOf } from "../lib/format";
+import { GLOSSARY } from "../lib/glossary";
+import InfoTip from "./InfoTip";
 import { Skeleton } from "./Panel";
 
 interface Props {
   row?: MetricRow;
   bench?: MetricRow;
   loading: boolean;
+  isWindow: boolean;
 }
 
 const TONE = { pos: "text-gain", neg: "text-loss", neutral: "text-fg" } as const;
 
-export default function KpiStrip({ row, bench, loading }: Props) {
+export default function KpiStrip({ row, bench, loading, isWindow }: Props) {
+  const ret = isWindow ? row?.total_return : row?.cagr;
+  const benchRet = isWindow ? bench?.total_return : bench?.cagr;
   const tiles = [
-    { label: "CAGR", value: fmtPct(row?.cagr), tone: toneOf(row?.cagr),
-      sub: row && bench ? `${fmtPct((row.cagr ?? 0) - (bench.cagr ?? 0))} vs benchmark` : undefined },
+    { label: isWindow ? "Return in window" : "CAGR", value: fmtPct(ret), tone: toneOf(ret),
+      sub: row && bench ? `${fmtPct((ret ?? 0) - (benchRet ?? 0))} vs benchmark` : undefined },
     { label: "Sharpe", value: fmtNum(row?.sharpe), tone: "neutral" as const,
       sub: bench ? `Benchmark ${fmtNum(bench.sharpe)}` : undefined },
     { label: "Max drawdown", value: fmtPct(row?.max_drawdown, 1), tone: toneOf(row?.max_drawdown),
@@ -27,7 +32,10 @@ export default function KpiStrip({ row, bench, loading }: Props) {
     <section aria-label="Key metrics" className="grid grid-cols-2 gap-3 md:grid-cols-5">
       {tiles.map((t) => (
         <div key={t.label} className="rounded-xl border border-line bg-surface px-4 py-3">
-          <div className="text-xs font-medium text-fg-3">{t.label}</div>
+          <div className="flex items-center justify-between gap-1 text-xs font-medium text-fg-3">
+            <span>{t.label}</span>
+            <InfoTip term={t.label}>{GLOSSARY[t.label]}</InfoTip>
+          </div>
           {loading ? (
             <Skeleton className="mt-2 h-7 w-24" />
           ) : (
