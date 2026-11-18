@@ -38,6 +38,16 @@ describe("App", () => {
     expect(screen.getByRole("region", { name: /key metrics/i })).toHaveTextContent("CAGR");
   });
 
+  it("tells the user when results come from the saved snapshot instead of live data", async () => {
+    const snap = { ...FIXTURE, meta: { ...FIXTURE.meta, data_source: "snapshot" } };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(snap), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+    render(<App />);
+    await userEvent.setup().click(screen.getByRole("button", { name: /run backtest/i }));
+    expect(await screen.findByRole("status")).toHaveTextContent(/saved snapshot/i);
+  });
+
   it("shows the API's error message when a run fails", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ detail: "No price data for: ZZZZ. Check the ticker symbols." }), { status: 400 }),

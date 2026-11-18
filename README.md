@@ -23,13 +23,22 @@ Walk-forward backtester that compares five long-only allocation strategies (equa
 
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 uvicorn api.main:app --reload                       # API on :8000
 
 cd web && npm install && npm run dev                 # UI on http://localhost:5173
 ```
 
 `http://localhost:5173/?demo=1` runs the UI on bundled synthetic data without the API.
+
+## Deploy (Vercel)
+
+One Vercel project serves both parts from the same domain, using Vercel Services (`vercel.json`): the React app at `/` and the FastAPI app at `/api`.
+
+1. Create a Vercel project from this repo with **Root Directory `./`** (not `web/`).
+2. Deploy. Prices are cached in `/tmp` on Vercel; the deploy itself is read-only.
+
+Yahoo Finance often blocks cloud servers. When live downloads fail, the API falls back to a snapshot of real prices in `data/snapshot/` and the UI says so. Refresh it from your own machine with `python scripts/make_snapshot.py`, then commit the CSVs.
 
 ## Tests
 
