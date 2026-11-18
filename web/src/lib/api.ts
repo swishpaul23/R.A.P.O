@@ -35,7 +35,7 @@ export interface BacktestResponse {
   clusters: { order: string[]; linkage: number[][] } | null;
   frontier: {
     points: { vol: number; ret: number; sharpe: number }[];
-    strategies: { name: string; vol: number; ret: number }[];
+    strategies: { name: string; vol: number; ret: number; sharpe: number | null }[];
   } | null;
 }
 

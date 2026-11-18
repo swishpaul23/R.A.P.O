@@ -101,3 +101,10 @@ def test_nan_metrics_serialize_as_null(client):
     assert res.status_code == 200
     bench = res.json()["table"][-1]
     assert bench["sharpe"] is None
+
+
+def test_frontier_strategy_points_include_sharpe(client):
+    data = client.post("/api/backtest", json=BODY).json()
+    rf_annual = 0.0001 * 252
+    for p in data["frontier"]["strategies"]:
+        assert p["sharpe"] == pytest.approx((p["ret"] - rf_annual) / p["vol"])

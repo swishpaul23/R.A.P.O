@@ -10,13 +10,13 @@ interface Props {
 }
 
 const FIELDS: { key: keyof ParamsInput; label: string; type: string; hint?: string; className: string; placeholder?: string; inputMode?: "numeric" | "decimal" }[] = [
-  { key: "start", label: "Start", type: "date", className: "md:col-span-2" },
-  { key: "end", label: "End", type: "date", className: "md:col-span-2" },
-  { key: "tickers", label: "Tickers", type: "text", placeholder: "SPY, TLT, GLD", hint: "Comma or space separated", className: "md:col-span-5" },
-  { key: "benchmark", label: "Benchmark", type: "text", placeholder: "SPY", className: "md:col-span-3" },
-  { key: "lookback", label: "Lookback (days)", type: "text", inputMode: "numeric", className: "md:col-span-2" },
-  { key: "rebalance", label: "Rebalance (days)", type: "text", inputMode: "numeric", className: "md:col-span-2" },
-  { key: "cost", label: "Cost (bps)", type: "text", inputMode: "decimal", className: "md:col-span-2" },
+  { key: "start", label: "Start", type: "date", className: "lg:col-span-2" },
+  { key: "end", label: "End", type: "date", className: "lg:col-span-2" },
+  { key: "tickers", label: "Tickers", type: "text", placeholder: "SPY, TLT, GLD", hint: "Comma or space separated", className: "lg:col-span-5" },
+  { key: "benchmark", label: "Benchmark", type: "text", placeholder: "SPY", className: "lg:col-span-3" },
+  { key: "lookback", label: "Lookback (days)", type: "text", inputMode: "numeric", className: "lg:col-span-2" },
+  { key: "rebalance", label: "Rebalance (days)", type: "text", inputMode: "numeric", className: "lg:col-span-2" },
+  { key: "cost", label: "Cost (bps)", type: "text", inputMode: "decimal", className: "lg:col-span-2" },
 ];
 
 export default function ParamsForm({ value, onChange, onSubmit, running }: Props) {
@@ -48,7 +48,7 @@ export default function ParamsForm({ value, onChange, onSubmit, running }: Props
 
   return (
     <form onSubmit={submit} noValidate aria-label="Backtest parameters"
-      className="grid grid-cols-2 gap-x-3 gap-y-3 md:grid-cols-12 md:items-start">
+      className="grid grid-cols-2 gap-x-3 gap-y-3 lg:grid-cols-12 lg:items-start">
       {FIELDS.map((f) => {
         const err = touched[f.key] || errors[f.key] ? errors[f.key] : undefined;
         return (
@@ -78,12 +78,12 @@ export default function ParamsForm({ value, onChange, onSubmit, running }: Props
           </div>
         );
       })}
-      <div className="col-span-2 flex md:col-span-6 md:justify-end md:pt-[1.375rem]">
+      <div className="col-span-2 flex lg:col-span-6 lg:justify-end lg:pt-[1.375rem]">
         <button
           type="submit"
           aria-busy={running}
           className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-accent-fill px-5 text-sm font-medium text-white
-            hover:bg-accent-fill-hover md:w-auto"
+            hover:bg-accent-fill-hover lg:w-auto"
         >
           {running ? <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
           {running ? "Running backtest…" : "Run backtest"}
