@@ -108,3 +108,29 @@ def test_frontier_strategy_points_include_sharpe(client):
     rf_annual = 0.0001 * 252
     for p in data["frontier"]["strategies"]:
         assert p["sharpe"] == pytest.approx((p["ret"] - rf_annual) / p["vol"])
+
+
+def _fail_prices(tickers, start, end):
+    raise ValueError(f"No price data for: {', '.join(tickers)}. Check the symbol and your internet connection.")
+
+
+def _fail_rf(start, end):
+    raise ValueError("No price data for: ^IRX.")
+
+
+def test_live_data_reported_as_live(client):
+    assert client.post("/api/backtest", json=BODY).json()["meta"]["data_source"] == "live"
+
+
+def test_falls_back_to_snapshot_when_live_data_fails():
+    app = create_app(prices_loader=_fail_prices, rf_loader=_fail_rf, fallback=(fake_prices, fake_rf))
+    res = TestClient(app).post("/api/backtest", json=BODY)
+    assert res.status_code == 200
+    assert res.json()["meta"]["data_source"] == "snapshot"
+
+
+def test_both_sources_failing_returns_the_live_error():
+    app = create_app(prices_loader=_fail_prices, rf_loader=_fail_rf, fallback=(_fail_prices, _fail_rf))
+    res = TestClient(app).post("/api/backtest", json=BODY)
+    assert res.status_code == 400
+    assert "internet connection" in res.json()["detail"]

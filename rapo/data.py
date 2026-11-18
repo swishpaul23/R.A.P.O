@@ -1,7 +1,7 @@
 """Price data with a local Parquet cache.
 
 All network access goes through a `Downloader`, so tests (and offline runs)
-can swap in a fake. Each ticker is cached in its own Parquet file plus a small
+can swap in a fake. Each ticker is cached in its own CSV file plus a small
 JSON sidecar recording the date range that has already been requested, so
 re-running a backtest doesn't hit Yahoo again and extending the end date only
 downloads the missing tail.
@@ -10,6 +10,7 @@ downloads the missing tail.
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -17,8 +18,34 @@ import pandas as pd
 
 Downloader = Callable[[str, pd.Timestamp, pd.Timestamp], pd.Series]
 
-DEFAULT_CACHE = Path(".cache/prices")
 RISK_FREE_TICKER = "^IRX"  # 13-week US T-bill yield, quoted in annual percent
+
+
+def default_cache_dir() -> Path:
+    """Where prices are cached: $RAPO_CACHE_DIR, else /tmp on Vercel (read-only deploy), else .cache/prices."""
+    if os.environ.get("RAPO_CACHE_DIR"):
+        return Path(os.environ["RAPO_CACHE_DIR"])
+    if os.environ.get("VERCEL"):
+        return Path("/tmp/rapo-cache")
+    return Path(".cache/prices")
+
+
+def _safe(ticker: str) -> str:
+    return ticker.replace("^", "_").replace("/", "_")
+
+
+def snapshot_downloader(snapshot_dir: Path) -> Downloader:
+    """Serve prices from a committed CSV snapshot (one `<ticker>.csv` per ticker)."""
+    snapshot_dir = Path(snapshot_dir)
+
+    def download(ticker: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.Series:
+        path = snapshot_dir / f"{_safe(ticker)}.csv"
+        if not path.exists():
+            return pd.Series(dtype=float)
+        s = pd.read_csv(path, index_col=0, parse_dates=True).iloc[:, 0].astype(float)
+        return s[(s.index >= pd.Timestamp(start)) & (s.index <= pd.Timestamp(end))]
+
+    return download
 
 
 def yf_downloader(ticker: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.Series:
@@ -42,8 +69,7 @@ def yf_downloader(ticker: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.Ser
 
 
 def _paths(cache_dir: Path, ticker: str) -> tuple[Path, Path]:
-    safe = ticker.replace("^", "_").replace("/", "_")
-    return cache_dir / f"{safe}.parquet", cache_dir / f"{safe}.json"
+    return cache_dir / f"{_safe(ticker)}.csv", cache_dir / f"{_safe(ticker)}.json"
 
 
 def _load_one(ticker: str, start: pd.Timestamp, end: pd.Timestamp,
@@ -52,7 +78,7 @@ def _load_one(ticker: str, start: pd.Timestamp, end: pd.Timestamp,
     cached = None
     meta = None
     if data_path.exists() and meta_path.exists():
-        cached = pd.read_parquet(data_path)["price"]
+        cached = pd.read_csv(data_path, index_col=0, parse_dates=True)["price"].astype(float)
         meta = {k: pd.Timestamp(v) for k, v in json.loads(meta_path.read_text()).items()}
 
     if meta and meta["from"] <= start and meta["through"] >= end:
@@ -72,7 +98,7 @@ def _load_one(ticker: str, start: pd.Timestamp, end: pd.Timestamp,
         return pd.Series(dtype=float, name=ticker)
 
     cache_dir.mkdir(parents=True, exist_ok=True)
-    series.to_frame("price").to_parquet(data_path)
+    series.rename_axis("date").to_frame("price").to_csv(data_path)
     meta_path.write_text(json.dumps({k: v.isoformat() for k, v in meta.items()}))
 
     out = series[(series.index >= start) & (series.index <= end)]
@@ -81,7 +107,7 @@ def _load_one(ticker: str, start: pd.Timestamp, end: pd.Timestamp,
 
 
 def fetch_prices(tickers: list[str], start: str, end: str,
-                 cache_dir: Path = DEFAULT_CACHE,
+                 cache_dir: Path | None = None,
                  downloader: Downloader = yf_downloader) -> pd.DataFrame:
     """Adjusted close prices, one column per ticker in input order.
 
@@ -89,7 +115,7 @@ def fetch_prices(tickers: list[str], start: str, end: str,
     first trading day. Raises ValueError naming any ticker with no data.
     """
     s, e = pd.Timestamp(start), pd.Timestamp(end)
-    cache_dir = Path(cache_dir)
+    cache_dir = Path(cache_dir) if cache_dir is not None else default_cache_dir()
     columns = {t: _load_one(t, s, e, cache_dir, downloader) for t in tickers}
     missing = [t for t, col in columns.items() if col.empty]
     if missing:
@@ -100,7 +126,7 @@ def fetch_prices(tickers: list[str], start: str, end: str,
     return df
 
 
-def risk_free_daily(start: str, end: str, cache_dir: Path = DEFAULT_CACHE,
+def risk_free_daily(start: str, end: str, cache_dir: Path | None = None,
                     downloader: Downloader = yf_downloader) -> pd.Series:
     """Daily risk-free rate from the 13-week T-bill yield (annual % / 100 / 252)."""
     irx = fetch_prices([RISK_FREE_TICKER], start, end, cache_dir, downloader)[RISK_FREE_TICKER]
