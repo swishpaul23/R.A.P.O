@@ -1,0 +1,61 @@
+import pandas as pd
+import pytest
+
+from rapo.data import fetch_prices, risk_free_daily
+
+DAYS = pd.bdate_range("2024-01-01", "2024-03-29")
+
+
+class FakeDownloader:
+    """Serves deterministic price series and records every call."""
+
+    def __init__(self, series: dict[str, pd.Series]):
+        self.series = series
+        self.calls: list[tuple[str, pd.Timestamp, pd.Timestamp]] = []
+
+    def __call__(self, ticker, start, end):
+        self.calls.append((ticker, pd.Timestamp(start), pd.Timestamp(end)))
+        s = self.series.get(ticker)
+        if s is None:
+            return pd.Series(dtype=float)
+        return s[(s.index >= pd.Timestamp(start)) & (s.index <= pd.Timestamp(end))]
+
+
+@pytest.fixture
+def fake():
+    a = pd.Series(range(1, len(DAYS) + 1), index=DAYS, dtype=float)
+    b = pd.Series(range(1, len(DAYS) + 1), index=DAYS, dtype=float)[2:]  # starts 2 days later
+    irx = pd.Series(5.04, index=DAYS)
+    return FakeDownloader({"A": a, "B": b, "^IRX": irx})
+
+
+def test_fetch_prices_outer_joins_and_keeps_order(tmp_path, fake):
+    df = fetch_prices(["A", "B"], "2024-01-01", "2024-01-31", tmp_path, fake)
+    assert list(df.columns) == ["A", "B"]
+    assert df["B"].isna().sum() == 2
+    assert df.index.min() == pd.Timestamp("2024-01-01")
+
+
+def test_fetch_prices_uses_cache_second_time(tmp_path, fake):
+    fetch_prices(["A", "B"], "2024-01-01", "2024-01-31", tmp_path, fake)
+    fetch_prices(["A", "B"], "2024-01-01", "2024-01-31", tmp_path, fake)
+    assert len(fake.calls) == 2
+
+
+def test_fetch_prices_downloads_only_missing_tail(tmp_path, fake):
+    fetch_prices(["A"], "2024-01-01", "2024-01-10", tmp_path, fake)
+    df = fetch_prices(["A"], "2024-01-01", "2024-01-20", tmp_path, fake)
+    assert fake.calls[1][1] > pd.Timestamp("2024-01-10")
+    assert df.index.max() == pd.Timestamp("2024-01-19")  # last business day <= 20th
+    assert not df.index.duplicated().any()
+
+
+def test_fetch_prices_bad_ticker_raises_with_name(tmp_path, fake):
+    with pytest.raises(ValueError, match="ZZZZ"):
+        fetch_prices(["A", "ZZZZ"], "2024-01-01", "2024-02-01", tmp_path, fake)
+
+
+def test_risk_free_daily_converts_percent(tmp_path, fake):
+    rf = risk_free_daily("2024-01-01", "2024-01-31", tmp_path, fake)
+    assert len(rf) > 0
+    assert rf.to_numpy() == pytest.approx(0.0504 / 252)

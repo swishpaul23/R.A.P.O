@@ -3,3 +3,10 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 .env
+.superpowers/
+.cache/
+__pycache__/
+.pytest_cache/
+web/node_modules/
+web/dist/
+*.tsbuildinfo
