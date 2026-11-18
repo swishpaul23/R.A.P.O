@@ -58,6 +58,9 @@ def build_report(prices: pd.DataFrame, rf: pd.Series, benchmark: str,
     for wname in STRESS_WINDOWS:
         sliced = {n: window(r, wname) for n, r in series.items()}
         if all(len(s) > 1 for s in sliced.values()):
-            stress[wname] = pd.DataFrame({n: summary(s, rf) for n, s in sliced.items()}).T
+            stress[wname] = pd.DataFrame({
+                n: summary(s, rf, window(turnovers[n], wname) if n in turnovers else None)
+                for n, s in sliced.items()
+            }).T
 
     return Report(results=results, benchmark=bench, table=table, stress_tables=stress)

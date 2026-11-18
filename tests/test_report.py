@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 
 from rapo.metrics import STRESS_WINDOWS
@@ -32,3 +33,10 @@ def test_benchmark_is_buy_and_hold_on_same_dates(synthetic_prices, flat_rf):
 def test_missing_benchmark_raises(synthetic_prices, flat_rf):
     with pytest.raises(ValueError, match="SPY"):
         build_report(synthetic_prices, flat_rf, benchmark="SPY", **KW)
+
+
+def test_stress_tables_include_turnover_inside_the_window(synthetic_prices, flat_rf):
+    rep = build_report(synthetic_prices, flat_rf, benchmark="BENCH", **KW)
+    t = rep.stress_tables["2022 rate shock"]
+    assert t.loc["HRP", "annual_turnover"] > 0
+    assert pd.isna(t.loc["BENCH", "annual_turnover"])

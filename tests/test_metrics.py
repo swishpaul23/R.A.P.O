@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from rapo.metrics import (STRESS_WINDOWS, ann_vol, cagr, calmar, max_drawdown, sharpe,
-                          sortino, summary, var_hist, window)
+                          sortino, summary, total_return, var_hist, window)
 
 IDX = pd.bdate_range("2024-01-01", periods=252)
 
@@ -72,7 +72,7 @@ def test_summary_has_all_fields():
     r = pd.Series(np.random.default_rng(4).normal(0.0005, 0.01, 252), index=IDX)
     turnover = pd.Series([1.0, 0.5], index=[IDX[0], IDX[100]])
     s = summary(r, pd.Series(0.0, index=IDX), turnover)
-    assert {"cagr", "ann_vol", "sharpe", "sortino", "max_drawdown", "calmar",
+    assert {"total_return", "cagr", "ann_vol", "sharpe", "sortino", "max_drawdown", "calmar",
             "var_95", "annual_turnover"} <= set(s.index)
     assert s["annual_turnover"] == pytest.approx(1.5)
 
@@ -81,3 +81,7 @@ def test_sharpe_nan_for_constant_excess_returns():
     r = pd.Series(0.0, index=IDX)
     rf = pd.Series(0.0001, index=IDX)
     assert np.isnan(sharpe(r, rf))
+
+
+def test_total_return_compounds_without_annualizing():
+    assert total_return(pd.Series([0.10, -0.50, 0.20])) == pytest.approx(1.1 * 0.5 * 1.2 - 1)
