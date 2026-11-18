@@ -84,3 +84,19 @@ def make_max_sharpe(rf_annual: float = 0.0, cap: float = 0.40) -> Strategy:
         return _clean(w, returns.columns)
 
     return max_sharpe
+
+
+def fixed_weights(target: dict[str, float]) -> Strategy:
+    """Constant target weights (e.g. 60/40), renormalized over the eligible assets.
+
+    Assets outside the target get 0. If none of the target assets is eligible yet,
+    falls back to equal weight so the portfolio is never empty.
+    """
+
+    def strategy(returns: pd.DataFrame) -> pd.Series:
+        w = pd.Series({c: float(target.get(c, 0.0)) for c in returns.columns})
+        if w.sum() <= 0:
+            return equal_weight(returns)
+        return w / w.sum()
+
+    return strategy
