@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from rapo.metrics import (STRESS_WINDOWS, ann_vol, cagr, calmar, max_drawdown, sharpe,
-                          sortino, summary, total_return, var_hist, window)
+from rapo.metrics import (STRESS_WINDOWS, ann_vol, cagr, calmar, max_drawdown, rebound_capture, sharpe,
+                          sortino, summary, total_return, var_hist, whipsaw_count, window)
 
 IDX = pd.bdate_range("2024-01-01", periods=252)
 
@@ -85,3 +85,24 @@ def test_sharpe_nan_for_constant_excess_returns():
 
 def test_total_return_compounds_without_annualizing():
     assert total_return(pd.Series([0.10, -0.50, 0.20])) == pytest.approx(1.1 * 0.5 * 1.2 - 1)
+
+
+def test_rebound_capture_ratio():
+    idx = pd.bdate_range("2020-03-20", periods=6)
+    bench = pd.Series([0.0, 0.1, 0.0, 0.0, 0.0, 0.0], index=idx)   # +10% after the trough
+    strat = pd.Series([0.0, 0.05, 0.0, 0.0, 0.0, 0.0], index=idx)  # +5%
+    assert rebound_capture(strat, bench, "2020-03-20", days=5) == pytest.approx(0.5)
+
+
+def test_rebound_capture_nan_when_benchmark_did_not_rebound():
+    idx = pd.bdate_range("2020-03-20", periods=4)
+    flat = pd.Series(0.0, index=idx)
+    assert np.isnan(rebound_capture(flat, flat, "2020-03-20", days=3))
+
+
+def test_whipsaw_counts_quick_round_trips_only():
+    quick = pd.Series([0, 0, .2, .2, 0, 0, 0, .25, 0, 0])
+    slow = pd.Series([0, .2, .2, .2, .2, .2, .2, .2, 0])
+    assert whipsaw_count(quick, weeks=1, threshold=0.10) == 2
+    assert whipsaw_count(slow, weeks=1, threshold=0.10) == 0
+    assert whipsaw_count(pd.Series([0.0] * 10)) == 0

@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from conftest import two_uncorrelated
-from rapo.strategies import equal_weight, inverse_vol, make_max_sharpe, min_variance
+from rapo.strategies import equal_weight, fixed_weights, inverse_vol, make_max_sharpe, min_variance
 
 ALL = [equal_weight, inverse_vol, min_variance, make_max_sharpe()]
 IDS = ["equal_weight", "inverse_vol", "min_variance", "max_sharpe"]
@@ -47,3 +47,18 @@ def test_near_duplicate_assets(strat, random_returns):
     w = strat(r)
     assert w.sum() == pytest.approx(1.0)
     assert (w >= -1e-10).all()
+
+
+def test_fixed_weights_ignores_assets_outside_the_target(random_returns):
+    w = fixed_weights({"AAA": 0.6, "BBB": 0.4})(random_returns)
+    assert w.to_dict() == pytest.approx({"AAA": 0.6, "BBB": 0.4, "CCC": 0.0, "DDD": 0.0})
+
+
+def test_fixed_weights_renormalizes_over_eligible(random_returns):
+    w = fixed_weights({"AAA": 0.6, "ZZZ": 0.4})(random_returns[["AAA", "BBB"]])
+    assert w.to_dict() == pytest.approx({"AAA": 1.0, "BBB": 0.0})
+
+
+def test_fixed_weights_with_no_target_assets_falls_back_to_equal_weight(random_returns):
+    w = fixed_weights({"ZZZ": 1.0})(random_returns)
+    assert w.to_numpy() == pytest.approx([0.25] * 4)

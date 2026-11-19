@@ -84,3 +84,41 @@ def summary(r: pd.Series, rf: pd.Series, turnover: pd.Series | None = None) -> p
 def window(r: pd.Series, name: str) -> pd.Series:
     start, end = STRESS_WINDOWS[name]
     return r.loc[start:end]
+
+
+def rebound_capture(r: pd.Series, bench: pd.Series, trough: str, days: int = 63) -> float:
+    """Share of the benchmark's rebound the strategy captured in the `days` after `trough`.
+
+    1.0 = matched the recovery; 0.5 = got half of it. NaN if the benchmark didn't rise.
+    """
+    after_r = r.loc[pd.Timestamp(trough):].iloc[1: days + 1]
+    after_b = bench.loc[pd.Timestamp(trough):].iloc[1: days + 1]
+    gain_b = float((1.0 + after_b).prod() - 1.0)
+    if gain_b <= 0:
+        return float("nan")
+    return float((1.0 + after_r).prod() - 1.0) / gain_b
+
+
+def whipsaw_count(tilt: pd.Series, weeks: int = 4, threshold: float = 0.10) -> int:
+    """Number of defensive moves (tilt up by >= threshold) reversed within `weeks`.
+
+    Each one is a round trip that cost trading fees without lasting protection.
+    """
+    window = weeks * 5
+    values = tilt.fillna(0.0).to_numpy()
+    count, low, rising, start, peak = 0, values[0] if len(values) else 0.0, False, 0, 0.0
+    for i, v in enumerate(values):
+        if not rising:
+            if v - low >= threshold - 1e-12:
+                rising, start, peak = True, i, v
+            else:
+                low = min(low, v)
+            continue
+        peak = max(peak, v)
+        if peak - v >= threshold - 1e-12:
+            if i - start <= window:
+                count += 1
+            rising, low = False, v
+        elif i - start > window:
+            rising, low = False, v
+    return count

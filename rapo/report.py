@@ -35,14 +35,17 @@ class Report:
 
 
 def build_report(prices: pd.DataFrame, rf: pd.Series, benchmark: str,
-                 strategies: dict[str, Strategy] | None = None, **backtest_kwargs) -> Report:
+                 strategies: dict[str, Strategy] | None = None,
+                 extra_benchmarks: dict[str, Strategy] | None = None, **backtest_kwargs) -> Report:
+    """`extra_benchmarks` (e.g. 60/40) run through the same backtest and are reported like strategies."""
     if benchmark not in prices.columns:
         raise ValueError(f"Benchmark {benchmark} has no price data.")
     if strategies is None:
         strategies = default_strategies(rf_annual=float(rf.mean() * 252))
 
     universe = simple_returns(prices.drop(columns=benchmark))
-    results = {name: run_backtest(universe, s, **backtest_kwargs) for name, s in strategies.items()}
+    results = {name: run_backtest(universe, s, **backtest_kwargs)
+               for name, s in {**strategies, **(extra_benchmarks or {})}.items()}
 
     dates = next(iter(results.values())).returns.index
     bench = simple_returns(prices[[benchmark]])[benchmark].reindex(dates).fillna(0.0)
