@@ -142,3 +142,21 @@ def test_reports_which_assets_were_eligible_at_the_last_rebalance(client):
     data = client.post("/api/backtest", json=body).json()
     assert data["eligible"] == ["TLT", "GLD", "SPY"]
     assert data["weights"]["Equal weight"]["LATE"] == 0
+
+
+def test_regime_endpoint_serves_study_files(tmp_path, monkeypatch):
+    import api.main as m
+    (tmp_path / "latest.json").write_text('{"as_of": "2026-11-17", "round2": {"chosen": {"signal": "hmm"}}}')
+    (tmp_path / "backward.json").write_text('{"rule": {"signal": "hmm", "q": 0.9}}')
+    monkeypatch.setattr(m, "REGIME_DIR", tmp_path)
+    data = TestClient(m.create_app(prices_loader=fake_prices, rf_loader=fake_rf)).get("/api/regime").json()
+    assert data["study"]["as_of"] == "2026-11-17"
+    assert data["backward"]["rule"]["q"] == 0.9
+
+
+def test_regime_endpoint_404_when_study_missing(tmp_path, monkeypatch):
+    import api.main as m
+    monkeypatch.setattr(m, "REGIME_DIR", tmp_path)
+    res = TestClient(m.create_app(prices_loader=fake_prices, rf_loader=fake_rf)).get("/api/regime")
+    assert res.status_code == 404
+    assert "run_regime_study.py" in res.json()["detail"]
