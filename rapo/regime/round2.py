@@ -10,7 +10,7 @@ import pandas as pd
 
 from rapo.backtest import run_backtest
 from rapo.hrp import hrp
-from rapo.metrics import STRESS_WINDOWS, max_drawdown, summary, whipsaw_count, window
+from rapo.metrics import STRESS_WINDOWS, max_drawdown, summary, whipsaw_count
 from rapo.regime.evaluate import block_bootstrap_ci
 from rapo.regime.overlay import DEFAULT_DEFENSIVE, make_tilt_overlay, percentile_tilt
 from rapo.regime.study import _clean, _restrict, _sharpe
@@ -20,6 +20,54 @@ from rapo.strategies import equal_weight, fixed_weights
 CANDIDATE_SIGNALS = ["logistic", "hmm", "vol_21"]  # protocol order (used for ties)
 QS = (0.80, 0.90)
 BASES = {"Equal weight": equal_weight, "HRP": hrp}
+
+
+def evaluate_rule(R: pd.DataFrame, rf: pd.Series, universe: list[str], tilt: pd.Series,
+                  start: pd.Timestamp, end: pd.Timestamp | None, windows: dict[str, tuple[str, str]],
+                  defensive: dict[str, float], sixty: dict[str, float], lookback: int, cost_bps: float,
+                  bootstrap_n: int, signal: pd.Series | None = None) -> dict:
+    """Run a tilt rule and its plain bases, then report one test period: table, windows, bootstrap, series."""
+    bt = dict(lookback=lookback, cost_bps=cost_bps, rebalance_every=21)
+    runs = {}
+    for name, s in BASES.items():
+        runs[name] = run_backtest(R, _restrict(s, universe), **bt)
+        runs[f"{name} + regime"] = run_backtest(
+            R, make_tilt_overlay(s, tilt, defensive=defensive, base_assets=universe), **bt)
+    runs["60/40"] = run_backtest(R, fixed_weights(sixty), lookback=lookback, cost_bps=cost_bps, rebalance_every=63)
+    test = lambda r: r.loc[start:end]  # noqa: E731
+    rets = {n: test(r.returns) for n, r in runs.items()}
+    rets["SPY"] = test(R["SPY"]).reindex(rets["HRP"].index)
+    names = ["SPY", "60/40", "Equal weight", "Equal weight + regime", "HRP", "HRP + regime"]
+    table = [{"name": n, **summary(rets[n], rf, test(runs[n].turnover) if n in runs else None).to_dict()}
+             for n in names]
+    stress = {}
+    for wname, (ws, we) in windows.items():
+        sliced = {n: rets[n].loc[ws:we] for n in names}
+        if all(len(s) > 1 for s in sliced.values()):
+            stress[wname] = [{"name": n, **summary(s, rf).to_dict()} for n, s in sliced.items()]
+
+    def rf_on(idx):
+        return rf.reindex(rf.index.union(idx)).ffill().bfill().reindex(idx)
+
+    boot = []
+    for base in BASES:
+        a, b = rets[f"{base} + regime"], rets[base]
+        for metric, fn, x, y in (("sharpe", _sharpe, a - rf_on(a.index), b - rf_on(b.index)),
+                                 ("max_drawdown", max_drawdown, a, b)):
+            diff, lo, hi = block_bootstrap_ci(x, y, fn, n=bootstrap_n)
+            boot.append({"base": base, "metric": metric, "diff": diff, "lo": lo, "hi": hi,
+                         "significant": bool(lo > 0 or hi < 0)})
+    idx = rets["HRP"].index
+    wealth = lambda r: (1.0 + r).cumprod()  # noqa: E731
+    series = {"dates": [d.date().isoformat() for d in idx],
+              "tilt": tilt.reindex(idx).round(4).tolist(),
+              "spy": wealth(rets["SPY"]).round(5).tolist(),
+              "hrp": wealth(rets["HRP"]).round(5).tolist(),
+              "hrp_regime": wealth(rets["HRP + regime"]).round(5).tolist()}
+    if signal is not None:
+        series["signal"] = signal.reindex(idx).round(5).tolist()
+    return {"table": table, "stress_windows": stress, "bootstrap": boot,
+            "whipsaws": whipsaw_count(test(tilt)), "avg_tilt": float(test(tilt).mean()), "series": series}
 
 
 def run_round2(prices: pd.DataFrame, rf: pd.Series, universe: list[str], signals: dict[str, pd.Series],
@@ -37,7 +85,6 @@ def run_round2(prices: pd.DataFrame, rf: pd.Series, universe: list[str], signals
     start = max([plain["HRP"].returns.index[0]] + [s.first_valid_index() for s in signals.values()])
     split_ts = pd.Timestamp(split)
     dev = lambda r: r.loc[start: split_ts - pd.Timedelta(days=1)]  # noqa: E731
-    hold = lambda r: r.loc[split_ts:]  # noqa: E731
 
     # 1. Development: score every candidate on 2010-2019 only.
     candidates, tilts, overlays = [], {}, {}
@@ -61,44 +108,16 @@ def run_round2(prices: pd.DataFrame, rf: pd.Series, universe: list[str], signals
     tilt, runs = tilts[key], overlays[key]
 
     # 2. Holdout: the locked rule, run once.
-    sixty = run_backtest(R, fixed_weights({"SPY": 0.6, "AGG": 0.4}), lookback=lookback,
-                         cost_bps=cost_bps, rebalance_every=63)
-    rets = {"Equal weight": plain["Equal weight"].returns, "Equal weight + regime": runs["Equal weight"].returns,
-            "HRP": plain["HRP"].returns, "HRP + regime": runs["HRP"].returns, "60/40": sixty.returns}
-    turns = {"Equal weight": plain["Equal weight"].turnover, "Equal weight + regime": runs["Equal weight"].turnover,
-             "HRP": plain["HRP"].turnover, "HRP + regime": runs["HRP"].turnover, "60/40": sixty.turnover}
-    rets["SPY"] = R["SPY"].reindex(rets["HRP"].index)
-    names = ["SPY", "60/40", "Equal weight", "Equal weight + regime", "HRP", "HRP + regime"]
-    table = [{"name": n, **summary(hold(rets[n]), rf, hold(turns[n]) if n in turns else None).to_dict()}
-             for n in names]
-    stress = {}
-    for wname in STRESS_WINDOWS:
-        sliced = {n: window(hold(rets[n]), wname) for n in names}
-        if all(len(s) > 1 for s in sliced.values()):
-            stress[wname] = [{"name": n, **summary(s, rf).to_dict()} for n, s in sliced.items()]
-    boot = []
-    for base in BASES:
-        a, b = hold(rets[f"{base} + regime"]), hold(rets[base])
-        for metric, fn, x, y in (("sharpe", _sharpe, a - rf_on(a.index), b - rf_on(b.index)),
-                                 ("max_drawdown", max_drawdown, a, b)):
-            diff, lo, hi = block_bootstrap_ci(x, y, fn, n=bootstrap_n)
-            boot.append({"base": base, "metric": metric, "diff": diff, "lo": lo, "hi": hi,
-                         "significant": bool(lo > 0 or hi < 0)})
-
-    idx = hold(rets["HRP"]).index
-    wealth = lambda r: (1.0 + r).cumprod()  # noqa: E731
+    holdout = evaluate_rule(R, rf, universe, tilt, split_ts, None, STRESS_WINDOWS, DEFAULT_DEFENSIVE,
+                            {"SPY": 0.6, "AGG": 0.4}, lookback, cost_bps, bootstrap_n,
+                            signal=signals[best["signal"]])
     return _clean({
-        "periods": {"development_start": start, "split": split, "holdout_start": idx[0] if len(idx) else None,
-                    "holdout_end": idx[-1] if len(idx) else None},
+        "periods": {"development_start": start, "split": split,
+                    "holdout_start": holdout["series"]["dates"][0] if holdout["series"]["dates"] else None,
+                    "holdout_end": holdout["series"]["dates"][-1] if holdout["series"]["dates"] else None},
         "development": candidates,
         "chosen": {"signal": best["signal"], "q": best["q"]},
-        "holdout": {"table": table, "stress_windows": stress, "bootstrap": boot,
-                    "whipsaws": whipsaw_count(hold(tilt)), "avg_tilt": float(hold(tilt).mean())},
-        "series": {"dates": [d.date().isoformat() for d in idx],
-                   "signal": signals[best["signal"]].reindex(idx).round(5).tolist(),
-                   "tilt": tilt.reindex(idx).round(4).tolist(),
-                   "spy": wealth(hold(rets["SPY"])).round(5).tolist(),
-                   "hrp": wealth(hold(rets["HRP"])).round(5).tolist(),
-                   "hrp_regime": wealth(hold(rets["HRP + regime"])).round(5).tolist()},
+        "holdout": {k: holdout[k] for k in ("table", "stress_windows", "bootstrap", "whipsaws", "avg_tilt")},
+        "series": holdout["series"],
         "current": {"date": tilt.index[-1], "tilt": float(tilt.iloc[-1])},
     })
