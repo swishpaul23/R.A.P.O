@@ -5,6 +5,7 @@ Run locally:  uvicorn api.main:app --reload
 
 from __future__ import annotations
 
+import json
 import math
 from collections.abc import Callable
 from datetime import date
@@ -27,6 +28,7 @@ from rapo.returns import simple_returns
 
 BENCH_COL = "__benchmark__"
 SNAPSHOT_DIR = Path(__file__).resolve().parent.parent / "data" / "snapshot"
+REGIME_DIR = Path(__file__).resolve().parent.parent / "data" / "regime"
 FRONTIER_POINTS = 3000
 
 
@@ -184,6 +186,17 @@ def create_app(prices_loader: Callable = fetch_prices,
     @app.get("/api/health")
     def health():
         return {"status": "ok"}
+
+    @app.get("/api/regime")
+    def regime():
+        """Pre-computed Phase 2 study results (training runs offline; see scripts/)."""
+        study = REGIME_DIR / "latest.json"
+        if not study.exists():
+            raise HTTPException(status_code=404,
+                                detail="No regime study yet. Run scripts/run_regime_study.py and commit data/regime/.")
+        backward = REGIME_DIR / "backward.json"
+        return {"study": json.loads(study.read_text()),
+                "backward": json.loads(backward.read_text()) if backward.exists() else None}
 
     @app.post("/api/backtest")
     def backtest(req: BacktestRequest):

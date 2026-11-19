@@ -8,4 +8,9 @@ export const GLOSSARY: Record<string, string> = {
   Volatility: "How much returns swing around their average, annualized. Higher means a bumpier ride.",
   Sortino: "Like Sharpe, but only downside swings count as risk, so upside volatility isn't penalized.",
   Calmar: "CAGR divided by the size of the max drawdown: return earned per unit of worst-case loss.",
+  "Defensive tilt": "Share of the portfolio the locked rule would move into short Treasuries and gold today. 0% means no shift.",
+  "Stress probability": "The logistic model's calibrated chance that SPY falls 8% or more in the next 21 trading days. The long-run average is about 6%.",
+  AUC: "How well a model ranks stressful days above calm ones. 0.5 is a coin flip, 1.0 is perfect.",
+  "Brier skill": "How much better the model's probabilities are than always predicting the historical stress rate. Below 0% means worse.",
+  "95% interval": "Range the true difference likely falls in, from resampling the history in 21-day blocks. If it includes 0, the difference could be luck.",
 };
