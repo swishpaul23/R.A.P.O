@@ -26,9 +26,11 @@ TICKERS = [
     "NVDA", "AAPL", "MSFT",                     # single stocks
     "HYG", "SHY", "BIL",                        # credit, short T-bills
     "^VIX", "^TNX",                             # volatility index, 10-year yield
+    # Long-history stand-ins for the 2000-2009 backward test (docs/results/phase2-backward-protocol.md)
+    "VGTSX", "VEIEX", "VUSTX", "VFITX", "VGSIX", "VFISX", "VBMFX", "GC=F",
     RISK_FREE_TICKER,                           # risk-free rate
 ]
-START = "2005-01-01"
+START = "1993-01-29"  # SPY inception; round 1-2 studies still slice from 2005
 OUT = Path(__file__).resolve().parent.parent / "data" / "snapshot"
 
 
